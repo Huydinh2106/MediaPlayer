@@ -15,9 +15,10 @@ A modern, high-performance media player for Android built with Jetpack Compose a
 - **Intelligent Thumbnails**: Uses **Coil** to extract frames from videos and display them as thumbnails, with beautiful vector fallbacks for audio.
 - **History Tracking**: Keeps a persistent "Recently Played" list using a **Room Database**.
 - **Organization**:
-    - **Tabbed Interface**: Separate views for **Home** (Recent), **Library** (Audio/Video), and **Settings**.
+    - **Tabbed Interface**: Separate views for **Home** (Recent), **Library** (Audio/Video/Albums), and **Settings**.
     - **Search**: Real-time filtering of media items by title or artist.
     - **Advanced Sorting**: Sort by Name, Size, Date, Duration, Artist, or Album with **Ascending/Descending** toggles.
+    - **Custom Albums**: Create your own collections of audio and video files. Add or remove items from albums with ease.
 - **Customizable Playback**:
     - **Playlist Navigation**: Automatically loads the current filtered list as a playlist for easy Skip Next/Previous.
     - **Repeat Modes**: Cycle through Off, Repeat One, and Repeat All.

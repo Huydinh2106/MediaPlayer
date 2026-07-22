@@ -25,14 +25,13 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.example.mediaplayer.ui.HomeScreen
-import com.example.mediaplayer.ui.MediaListScreen
-import com.example.mediaplayer.ui.PlayerScreen
-import com.example.mediaplayer.ui.SettingsScreen
+import androidx.navigation.navArgument
+import com.example.mediaplayer.ui.*
 import com.example.mediaplayer.ui.theme.MediaPlayerTheme
 import com.example.mediaplayer.viewmodel.MediaViewModel
 
@@ -102,7 +101,8 @@ fun MainScreen() {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         bottomBar = {
-            if (hasPermission && currentDestination?.route != "player") {
+            val showBottomBar = currentDestination?.route in listOf("home", "list", "settings")
+            if (hasPermission && showBottomBar) {
                 NavigationBar {
                     NavigationBarItem(
                         selected = currentDestination?.route == "home",
@@ -171,6 +171,9 @@ fun MainScreen() {
                         onMediaClick = { mediaFile, playlist ->
                             viewModel.playMedia(mediaFile, playlist)
                             navController.navigate("player")
+                        },
+                        onAlbumClick = { albumId ->
+                            navController.navigate("album_detail/$albumId")
                         }
                     )
                 }
@@ -179,6 +182,21 @@ fun MainScreen() {
                 }
                 composable("player") {
                     PlayerScreen(viewModel = viewModel)
+                }
+                composable(
+                    route = "album_detail/{albumId}",
+                    arguments = listOf(navArgument("albumId") { type = NavType.LongType })
+                ) { backStackEntry ->
+                    val albumId = backStackEntry.arguments?.getLong("albumId") ?: 0L
+                    AlbumDetailScreen(
+                        viewModel = viewModel,
+                        albumId = albumId,
+                        onBack = { navController.popBackStack() },
+                        onMediaClick = { mediaFile, playlist ->
+                            viewModel.playMedia(mediaFile, playlist)
+                            navController.navigate("player")
+                        }
+                    )
                 }
             }
         }

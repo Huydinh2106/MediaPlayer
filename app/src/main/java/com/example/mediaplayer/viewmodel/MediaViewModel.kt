@@ -30,6 +30,7 @@ class MediaViewModel(application: Application) : AndroidViewModel(application) {
     private val settingsRepository = SettingsRepository(application)
     private val db = AppDatabase.getDatabase(application)
     private val recentDao = db.recentMediaDao()
+    private val albumDao = db.albumDao()
 
     private val _audioFiles = MutableStateFlow<List<MediaFile>>(emptyList())
     private val _videoFiles = MutableStateFlow<List<MediaFile>>(emptyList())
@@ -57,6 +58,9 @@ class MediaViewModel(application: Application) : AndroidViewModel(application) {
             allMedia.find { it.id == recent.mediaId }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val albums = albumDao.getAllAlbums()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val isBackgroundPlayEnabled = settingsRepository.isBackgroundPlayEnabled
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
@@ -123,6 +127,43 @@ class MediaViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             settingsRepository.setBackgroundPlayEnabled(enabled)
         }
+    }
+
+    fun createAlbum(name: String) {
+        viewModelScope.launch {
+            albumDao.insertAlbum(Album(name = name))
+        }
+    }
+
+    fun deleteAlbum(album: Album) {
+        viewModelScope.launch {
+            albumDao.deleteAlbum(album)
+        }
+    }
+
+    fun addMediaToAlbum(mediaId: Long, albumId: Long) {
+        viewModelScope.launch {
+            albumDao.insertMediaToAlbum(AlbumMediaCrossRef(albumId, mediaId))
+        }
+    }
+
+    fun removeMediaFromAlbum(mediaId: Long, albumId: Long) {
+        viewModelScope.launch {
+            albumDao.removeMediaFromAlbum(AlbumMediaCrossRef(albumId, mediaId))
+        }
+    }
+
+    fun getAlbumWithMedia(albumId: Long): Flow<List<MediaFile>> {
+        return combine(albumDao.getMediaIdsForAlbum(albumId), _audioFiles, _videoFiles) { crossRefs, audios, videos ->
+            val allMedia = audios + videos
+            crossRefs.mapNotNull { crossRef ->
+                allMedia.find { it.id == crossRef.mediaId }
+            }
+        }
+    }
+
+    fun getAlbumName(albumId: Long): Flow<String> {
+        return albumDao.getAlbumName(albumId)
     }
 
     fun playMedia(mediaFile: MediaFile, playlist: List<MediaFile>) {

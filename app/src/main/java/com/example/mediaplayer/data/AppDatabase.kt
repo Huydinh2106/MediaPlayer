@@ -5,9 +5,10 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [RecentMedia::class], version = 1, exportSchema = false)
+@Database(entities = [RecentMedia::class, Album::class, AlbumMediaCrossRef::class], version = 2, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun recentMediaDao(): RecentMediaDao
+    abstract fun albumDao(): AlbumDao
 
     companion object {
         @Volatile
@@ -19,7 +20,9 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "media_database"
-                ).build()
+                )
+                .fallbackToDestructiveMigration()
+                .build()
                 INSTANCE = instance
                 instance
             }
