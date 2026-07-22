@@ -1,12 +1,18 @@
 package com.example.mediaplayer.viewmodel
 
 import android.app.Application
+import android.content.ComponentName
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
-import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionToken
 import com.example.mediaplayer.data.*
+import com.example.mediaplayer.service.PlaybackService
+import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -20,7 +26,8 @@ enum class SortOrder {
 
 class MediaViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val repository = MediaStoreRepository(application.contentResolver)
+    private val mediaRepository = MediaStoreRepository(application.contentResolver)
+    private val settingsRepository = SettingsRepository(application)
     private val db = AppDatabase.getDatabase(application)
     private val recentDao = db.recentMediaDao()
 
@@ -51,23 +58,38 @@ class MediaViewModel(application: Application) : AndroidViewModel(application) {
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val isBackgroundPlayEnabled = settingsRepository.isBackgroundPlayEnabled
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
     private val _repeatMode = MutableStateFlow(Player.REPEAT_MODE_OFF)
     val repeatMode: StateFlow<Int> = _repeatMode
 
-    private val _currentPlayerState = MutableStateFlow<Player?>(null)
-    val currentPlayer: StateFlow<Player?> = _currentPlayerState
+    private val _player = MutableStateFlow<Player?>(null)
+    val player: StateFlow<Player?> = _player
 
-    val player: ExoPlayer by lazy {
-        ExoPlayer.Builder(application).build().also {
-            it.repeatMode = _repeatMode.value
-            _currentPlayerState.value = it
-        }
+    private var controllerFuture: ListenableFuture<MediaController>? = null
+
+    init {
+        val sessionToken = SessionToken(application, ComponentName(application, PlaybackService::class.java))
+        controllerFuture = MediaController.Builder(application, sessionToken).buildAsync()
+        controllerFuture?.addListener({
+            val controller = controllerFuture?.get()
+            _player.value = controller
+            controller?.let {
+                _repeatMode.value = it.repeatMode
+                it.addListener(object : Player.Listener {
+                    override fun onRepeatModeChanged(repeatMode: Int) {
+                        _repeatMode.value = repeatMode
+                    }
+                })
+            }
+        }, MoreExecutors.directExecutor())
     }
 
     fun loadMedia() {
         viewModelScope.launch {
-            _audioFiles.value = repository.getAudioFiles()
-            _videoFiles.value = repository.getVideoFiles()
+            _audioFiles.value = mediaRepository.getAudioFiles()
+            _videoFiles.value = mediaRepository.getVideoFiles()
         }
     }
 
@@ -88,25 +110,44 @@ class MediaViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggleRepeatMode() {
-        val nextMode = when (player.repeatMode) {
+        val currentPlayer = _player.value ?: return
+        val nextMode = when (currentPlayer.repeatMode) {
             Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ONE
             Player.REPEAT_MODE_ONE -> Player.REPEAT_MODE_ALL
             else -> Player.REPEAT_MODE_OFF
         }
-        player.repeatMode = nextMode
-        _repeatMode.value = nextMode
+        currentPlayer.repeatMode = nextMode
+    }
+
+    fun toggleBackgroundPlay(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setBackgroundPlayEnabled(enabled)
+        }
     }
 
     fun playMedia(mediaFile: MediaFile, playlist: List<MediaFile>) {
-        val mediaItems = playlist.map { MediaItem.fromUri(it.uri) }
+        val currentPlayer = _player.value ?: return
+        val mediaItems = playlist.map { file ->
+            MediaItem.Builder()
+                .setUri(file.uri)
+                .setMediaId(file.id.toString())
+                .setMediaMetadata(
+                    MediaMetadata.Builder()
+                        .setTitle(file.title)
+                        .setArtist(file.artist)
+                        .setAlbumTitle(file.album)
+                        .build()
+                )
+                .build()
+        }
         val startIndex = playlist.indexOfFirst { it.id == mediaFile.id }
         
-        player.setMediaItems(mediaItems)
+        currentPlayer.setMediaItems(mediaItems)
         if (startIndex != -1) {
-            player.seekTo(startIndex, 0L)
+            currentPlayer.seekTo(startIndex, 0L)
         }
-        player.prepare()
-        player.play()
+        currentPlayer.prepare()
+        currentPlayer.play()
 
         viewModelScope.launch {
             recentDao.insertRecent(
@@ -139,6 +180,8 @@ class MediaViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         super.onCleared()
-        player.release()
+        controllerFuture?.let {
+            MediaController.releaseFuture(it)
+        }
     }
 }

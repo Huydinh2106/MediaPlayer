@@ -14,11 +14,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -28,6 +32,7 @@ import androidx.navigation.compose.rememberNavController
 import com.example.mediaplayer.ui.HomeScreen
 import com.example.mediaplayer.ui.MediaListScreen
 import com.example.mediaplayer.ui.PlayerScreen
+import com.example.mediaplayer.ui.SettingsScreen
 import com.example.mediaplayer.ui.theme.MediaPlayerTheme
 import com.example.mediaplayer.viewmodel.MediaViewModel
 
@@ -49,6 +54,24 @@ fun MainScreen() {
     val navController = rememberNavController()
     var hasPermission by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    val isBackgroundPlayEnabled by viewModel.isBackgroundPlayEnabled.collectAsState()
+    val player by viewModel.player.collectAsState()
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                if (!isBackgroundPlayEnabled) {
+                    player?.pause()
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     val permissionsToRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         arrayOf(Manifest.permission.READ_MEDIA_AUDIO, Manifest.permission.READ_MEDIA_VIDEO)
@@ -109,6 +132,20 @@ fun MainScreen() {
                         icon = { Icon(Icons.Default.List, contentDescription = "Library") },
                         label = { Text("Library") }
                     )
+                    NavigationBarItem(
+                        selected = currentDestination?.route == "settings",
+                        onClick = {
+                            navController.navigate("settings") {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
+                        icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
+                        label = { Text("Settings") }
+                    )
                 }
             }
         }
@@ -136,6 +173,9 @@ fun MainScreen() {
                             navController.navigate("player")
                         }
                     )
+                }
+                composable("settings") {
+                    SettingsScreen(viewModel = viewModel)
                 }
                 composable("player") {
                     PlayerScreen(viewModel = viewModel)
