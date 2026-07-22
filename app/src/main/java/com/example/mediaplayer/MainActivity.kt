@@ -14,15 +14,21 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.annotation.RequiresApi
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BrightnessAuto
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -34,6 +40,7 @@ import com.example.mediaplayer.ui.MediaListScreen
 import com.example.mediaplayer.ui.PlayerScreen
 import com.example.mediaplayer.ui.theme.MediaPlayerTheme
 import com.example.mediaplayer.viewmodel.MediaViewModel
+import com.example.mediaplayer.viewmodel.ThemeMode
 
 class MainActivity : ComponentActivity() {
 
@@ -44,9 +51,17 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            MediaPlayerTheme {
+            val themeMode by viewModel.themeMode.collectAsState()
+            val darkTheme = when (themeMode) {
+                ThemeMode.SYSTEM -> isSystemInDarkTheme()
+                ThemeMode.LIGHT -> false
+                ThemeMode.DARK -> true
+            }
+            MediaPlayerTheme(darkTheme = darkTheme) {
                 MainScreen(
                     viewModel = viewModel,
+                    themeMode = themeMode,
+                    onCycleTheme = { viewModel.setThemeMode(nextThemeMode(themeMode)) },
                     isInPipMode = isInPipMode,
                     onEnterPip = { enterPipMode() }
                 )
@@ -90,9 +105,24 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+private fun nextThemeMode(current: ThemeMode): ThemeMode = when (current) {
+    ThemeMode.SYSTEM -> ThemeMode.LIGHT
+    ThemeMode.LIGHT -> ThemeMode.DARK
+    ThemeMode.DARK -> ThemeMode.SYSTEM
+}
+
+private fun themeIcon(mode: ThemeMode): ImageVector = when (mode) {
+    ThemeMode.SYSTEM -> Icons.Default.BrightnessAuto
+    ThemeMode.LIGHT -> Icons.Default.LightMode
+    ThemeMode.DARK -> Icons.Default.DarkMode
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     viewModel: MediaViewModel,
+    themeMode: ThemeMode = ThemeMode.SYSTEM,
+    onCycleTheme: () -> Unit = {},
     isInPipMode: Boolean = false,
     onEnterPip: () -> Unit = {}
 ) {
@@ -126,10 +156,32 @@ fun MainScreen(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
 
+    val showChrome = hasPermission && !isInPipMode && currentDestination?.route != "player"
+
     Scaffold(
         modifier = Modifier.fillMaxSize(),
+        topBar = {
+            if (showChrome) {
+                CenterAlignedTopAppBar(
+                    title = {
+                        Text(
+                            text = "MediaPlayer",
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    actions = {
+                        IconButton(onClick = onCycleTheme) {
+                            Icon(
+                                imageVector = themeIcon(themeMode),
+                                contentDescription = "Toggle theme (${themeMode.name})"
+                            )
+                        }
+                    }
+                )
+            }
+        },
         bottomBar = {
-            if (hasPermission && !isInPipMode && currentDestination?.route != "player") {
+            if (showChrome) {
                 NavigationBar {
                     NavigationBarItem(
                         selected = currentDestination?.route == "home",
@@ -156,7 +208,7 @@ fun MainScreen(
                                 restoreState = true
                             }
                         },
-                        icon = { Icon(Icons.Default.List, contentDescription = "Library") },
+                        icon = { Icon(Icons.Default.LibraryMusic, contentDescription = "Library") },
                         label = { Text("Library") }
                     )
                 }

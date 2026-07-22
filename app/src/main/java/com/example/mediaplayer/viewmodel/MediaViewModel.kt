@@ -1,6 +1,7 @@
 package com.example.mediaplayer.viewmodel
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
@@ -14,11 +15,31 @@ enum class SortType {
     NAME, SIZE, DATE, DURATION, ARTIST, ALBUM
 }
 
+enum class ThemeMode {
+    SYSTEM, LIGHT, DARK
+}
+
 class MediaViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = MediaStoreRepository(application.contentResolver)
     private val db = AppDatabase.getDatabase(application)
     private val recentDao = db.recentMediaDao()
+
+    private val prefs = application.getSharedPreferences("settings", Context.MODE_PRIVATE)
+
+    private val _themeMode = MutableStateFlow(loadThemeMode())
+    val themeMode: StateFlow<ThemeMode> = _themeMode
+
+    fun setThemeMode(mode: ThemeMode) {
+        _themeMode.value = mode
+        prefs.edit().putString(KEY_THEME_MODE, mode.name).apply()
+    }
+
+    private fun loadThemeMode(): ThemeMode {
+        val stored = prefs.getString(KEY_THEME_MODE, ThemeMode.SYSTEM.name)
+        return runCatching { ThemeMode.valueOf(stored ?: ThemeMode.SYSTEM.name) }
+            .getOrDefault(ThemeMode.SYSTEM)
+    }
 
     private val _audioFiles = MutableStateFlow<List<MediaFile>>(emptyList())
     private val _videoFiles = MutableStateFlow<List<MediaFile>>(emptyList())
@@ -107,5 +128,9 @@ class MediaViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         super.onCleared()
         player.release()
+    }
+
+    companion object {
+        private const val KEY_THEME_MODE = "theme_mode"
     }
 }
