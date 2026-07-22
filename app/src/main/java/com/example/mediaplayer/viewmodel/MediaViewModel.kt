@@ -68,6 +68,9 @@ class MediaViewModel(application: Application) : AndroidViewModel(application) {
     private val _repeatMode = MutableStateFlow(Player.REPEAT_MODE_OFF)
     val repeatMode: StateFlow<Int> = _repeatMode
 
+    private val _shuffleModeEnabled = MutableStateFlow(false)
+    val shuffleModeEnabled: StateFlow<Boolean> = _shuffleModeEnabled
+
     private val _player = MutableStateFlow<Player?>(null)
     val player: StateFlow<Player?> = _player
 
@@ -81,9 +84,14 @@ class MediaViewModel(application: Application) : AndroidViewModel(application) {
             _player.value = controller
             controller?.let {
                 _repeatMode.value = it.repeatMode
+                _shuffleModeEnabled.value = it.shuffleModeEnabled
                 it.addListener(object : Player.Listener {
                     override fun onRepeatModeChanged(repeatMode: Int) {
                         _repeatMode.value = repeatMode
+                    }
+
+                    override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
+                        _shuffleModeEnabled.value = shuffleModeEnabled
                     }
                 })
             }
@@ -121,6 +129,11 @@ class MediaViewModel(application: Application) : AndroidViewModel(application) {
             else -> Player.REPEAT_MODE_OFF
         }
         currentPlayer.repeatMode = nextMode
+    }
+
+    fun toggleShuffleMode() {
+        val currentPlayer = _player.value ?: return
+        currentPlayer.shuffleModeEnabled = !currentPlayer.shuffleModeEnabled
     }
 
     fun toggleBackgroundPlay(enabled: Boolean) {

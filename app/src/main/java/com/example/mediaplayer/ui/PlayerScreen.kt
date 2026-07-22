@@ -17,6 +17,7 @@ import com.example.mediaplayer.viewmodel.MediaViewModel
 fun PlayerScreen(viewModel: MediaViewModel) {
     val player by viewModel.player.collectAsState()
     val repeatMode by viewModel.repeatMode.collectAsState()
+    val shuffleModeEnabled by viewModel.shuffleModeEnabled.collectAsState()
 
     if (player == null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -97,8 +98,13 @@ fun PlayerScreen(viewModel: MediaViewModel) {
                         Icon(Icons.Default.SkipNext, contentDescription = "Next")
                     }
                     
-                    IconButton(onClick = { /* Shuffle logic */ }, enabled = false) {
-                         Icon(Icons.Default.Shuffle, contentDescription = "Shuffle", tint = LocalContentColor.current.copy(alpha = 0.38f))
+                    IconButton(onClick = { viewModel.toggleShuffleMode() }) {
+                        val tint = if (shuffleModeEnabled) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            LocalContentColor.current.copy(alpha = 0.38f)
+                        }
+                        Icon(Icons.Default.Shuffle, contentDescription = "Shuffle", tint = tint)
                     }
                 }
             }

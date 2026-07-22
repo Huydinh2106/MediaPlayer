@@ -21,6 +21,7 @@ A modern, high-performance media player for Android built with Jetpack Compose a
     - **Custom Albums**: Create your own collections of audio and video files. Add or remove items from albums with ease.
 - **Customizable Playback**:
     - **Playlist Navigation**: Automatically loads the current filtered list as a playlist for easy Skip Next/Previous.
+    - **Shuffle Playlist**: Randomize playback order within the current playlist.
     - **Repeat Modes**: Cycle through Off, Repeat One, and Repeat All.
 - **Responsive UI**: Fully declarative UI built with **Jetpack Compose** and **Material 3**.
 
