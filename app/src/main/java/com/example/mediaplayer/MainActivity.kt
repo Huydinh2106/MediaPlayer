@@ -1,14 +1,19 @@
 package com.example.mediaplayer
 
 import android.Manifest
+import android.app.PictureInPictureParams
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
+import android.util.Rational
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -19,7 +24,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -32,20 +36,66 @@ import com.example.mediaplayer.ui.theme.MediaPlayerTheme
 import com.example.mediaplayer.viewmodel.MediaViewModel
 
 class MainActivity : ComponentActivity() {
+
+    private val viewModel: MediaViewModel by viewModels()
+    private var isInPipMode by mutableStateOf(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             MediaPlayerTheme {
-                MainScreen()
+                MainScreen(
+                    viewModel = viewModel,
+                    isInPipMode = isInPipMode,
+                    onEnterPip = { enterPipMode() }
+                )
             }
         }
+    }
+
+    private fun enterPipMode() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
+        ) {
+            enterPictureInPictureMode(buildPipParams())
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    private fun buildPipParams(): PictureInPictureParams {
+        val builder = PictureInPictureParams.Builder()
+        val videoSize = viewModel.player.videoSize
+        if (videoSize.width > 0 && videoSize.height > 0) {
+            // Clamp aspect ratio to the range Android allows for PiP windows.
+            val ratio = Rational(videoSize.width, videoSize.height)
+            builder.setAspectRatio(ratio)
+        }
+        return builder.build()
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (viewModel.isCurrentVideo.value && viewModel.player.isPlaying) {
+            enterPipMode()
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: Configuration
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        isInPipMode = isInPictureInPictureMode
     }
 }
 
 @Composable
-fun MainScreen() {
-    val viewModel: MediaViewModel = viewModel()
+fun MainScreen(
+    viewModel: MediaViewModel,
+    isInPipMode: Boolean = false,
+    onEnterPip: () -> Unit = {}
+) {
     val navController = rememberNavController()
     var hasPermission by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -79,7 +129,7 @@ fun MainScreen() {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         bottomBar = {
-            if (hasPermission && currentDestination?.route != "player") {
+            if (hasPermission && !isInPipMode && currentDestination?.route != "player") {
                 NavigationBar {
                     NavigationBarItem(
                         selected = currentDestination?.route == "home",
@@ -138,7 +188,11 @@ fun MainScreen() {
                     )
                 }
                 composable("player") {
-                    PlayerScreen(viewModel = viewModel)
+                    PlayerScreen(
+                        viewModel = viewModel,
+                        isInPipMode = isInPipMode,
+                        onEnterPip = onEnterPip
+                    )
                 }
             }
         }

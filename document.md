@@ -6,6 +6,7 @@ A modern, high-performance media player for Android built with Jetpack Compose a
 
 - **Media Discovery**: Automatically scans local storage for audio and video files using `MediaStore`.
 - **High-Performance Playback**: Powered by **Android Media3 (ExoPlayer)** for seamless audio and video streaming.
+- **Picture-in-Picture (PiP)**: Continue watching videos in a floating window. Tap the PiP button on the player, or simply press Home while a video is playing to keep it on top of other apps (Android 8.0+).
 - **Rich Metadata**: Displays detailed information including title, artist, album, year, size, and duration.
 - **Intelligent Thumbnails**: Uses **Coil** to extract frames from videos and display them as thumbnails, with beautiful vector fallbacks for audio.
 - **History Tracking**: Keeps a persistent "Recently Played" list using a **Room Database**.

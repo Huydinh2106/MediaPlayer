@@ -47,6 +47,9 @@ class MediaViewModel(application: Application) : AndroidViewModel(application) {
     private val _currentPlayerState = MutableStateFlow<Player?>(null)
     val currentPlayer: StateFlow<Player?> = _currentPlayerState
 
+    private val _isCurrentVideo = MutableStateFlow(false)
+    val isCurrentVideo: StateFlow<Boolean> = _isCurrentVideo
+
     val player: ExoPlayer by lazy {
         ExoPlayer.Builder(application).build().also {
             _currentPlayerState.value = it
@@ -69,6 +72,7 @@ class MediaViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun playMedia(mediaFile: MediaFile) {
+        _isCurrentVideo.value = mediaFile.type == MediaType.VIDEO
         val mediaItem = MediaItem.fromUri(mediaFile.uri)
         player.setMediaItem(mediaItem)
         player.prepare()
