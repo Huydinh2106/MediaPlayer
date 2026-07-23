@@ -1,39 +1,33 @@
 package com.example.mediaplayer.ui
 
-import android.app.Activity
-import android.content.Context
-import android.content.ContextWrapper
-import android.view.View
-import androidx.activity.compose.BackHandler
-import androidx.annotation.OptIn
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
+import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
-import androidx.media3.common.util.UnstableApi
-import androidx.media3.ui.PlayerView
+import androidx.media3.common.Timeline
 import com.example.mediaplayer.viewmodel.MediaViewModel
+import kotlinx.coroutines.delay
 
-@OptIn(UnstableApi::class)
 @Composable
-fun PlayerScreen(viewModel: MediaViewModel) {
+fun PlayerScreen(viewModel: MediaViewModel, onBack: () -> Unit) {
     val player by viewModel.player.collectAsState()
     val repeatMode by viewModel.repeatMode.collectAsState()
     val shuffleModeEnabled by viewModel.shuffleModeEnabled.collectAsState()
@@ -46,195 +40,118 @@ fun PlayerScreen(viewModel: MediaViewModel) {
     }
 
     val activePlayer = player!!
-    val view = LocalView.current
-    var playerView by remember { mutableStateOf<PlayerView?>(null) }
-    var controlsVisible by remember { mutableStateOf(true) }
-    var isFullscreen by rememberSaveable { mutableStateOf(false) }
+
     var isPlaying by remember { mutableStateOf(activePlayer.isPlaying) }
+    var playbackState by remember { mutableIntStateOf(activePlayer.playbackState) }
+    var mediaMetadata by remember { mutableStateOf(activePlayer.mediaMetadata) }
+    var currentIndex by remember { mutableIntStateOf(activePlayer.currentMediaItemIndex) }
+    var playbackSpeed by remember { mutableFloatStateOf(activePlayer.playbackParameters.speed) }
+    var queueVersion by remember { mutableIntStateOf(0) }
 
     DisposableEffect(activePlayer) {
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) {
                 isPlaying = playing
             }
+
+            override fun onPlaybackStateChanged(state: Int) {
+                playbackState = state
+            }
+
+            override fun onMediaMetadataChanged(metadata: MediaMetadata) {
+                mediaMetadata = metadata
+            }
+
+            override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
+                currentIndex = activePlayer.currentMediaItemIndex
+            }
+
+            override fun onPlaybackParametersChanged(parameters: PlaybackParameters) {
+                playbackSpeed = parameters.speed
+            }
+
+            override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+                currentIndex = activePlayer.currentMediaItemIndex
+                queueVersion++
+            }
         }
         activePlayer.addListener(listener)
+        isPlaying = activePlayer.isPlaying
+        playbackState = activePlayer.playbackState
+        mediaMetadata = activePlayer.mediaMetadata
+        currentIndex = activePlayer.currentMediaItemIndex
+        playbackSpeed = activePlayer.playbackParameters.speed
         onDispose { activePlayer.removeListener(listener) }
     }
 
-    LaunchedEffect(isFullscreen) {
-        val window = view.context.findActivity()?.window ?: return@LaunchedEffect
-        val insetsController = WindowCompat.getInsetsController(window, view)
-        if (isFullscreen) {
-            insetsController.systemBarsBehavior =
-                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            insetsController.hide(WindowInsetsCompat.Type.systemBars())
-        } else {
-            insetsController.show(WindowInsetsCompat.Type.systemBars())
+    var positionMs by remember { mutableLongStateOf(0L) }
+    var durationMs by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(activePlayer) {
+        while (true) {
+            positionMs = activePlayer.currentPosition
+            durationMs = activePlayer.duration
+                .takeIf { it != C.TIME_UNSET }
+                ?.coerceAtLeast(0L)
+                ?: 0L
+            delay(500)
         }
     }
 
-    DisposableEffect(Unit) {
-        onDispose {
-            view.context.findActivity()?.window?.let { window ->
-                WindowCompat.getInsetsController(window, view)
-                    .show(WindowInsetsCompat.Type.systemBars())
-            }
-        }
-    }
+    var showQueueSheet by rememberSaveable { mutableStateOf(false) }
+    var showSpeedSheet by rememberSaveable { mutableStateOf(false) }
 
-    BackHandler(enabled = isFullscreen) {
-        isFullscreen = false
-        playerView?.setFullscreenButtonState(false)
-    }
+    val isVideo = mediaMetadata.mediaType == MediaMetadata.MEDIA_TYPE_VIDEO
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black)
-    ) {
-        AndroidView(
-            factory = { context ->
-                PlayerView(context).apply {
-                    this.player = activePlayer
-                    setShowPreviousButton(false)
-                    setShowNextButton(false)
-                    setControllerVisibilityListener(
-                        PlayerView.ControllerVisibilityListener { visibility ->
-                            controlsVisible = visibility == View.VISIBLE
-                        }
-                    )
-                    setFullscreenButtonClickListener { fullscreen ->
-                        isFullscreen = fullscreen
-                    }
-                }
-            },
-            update = { pv ->
-                pv.player = activePlayer
-                playerView = pv
-            },
-            modifier = Modifier.fillMaxSize()
+    if (isVideo) {
+        VideoPlayerContent(
+            player = activePlayer,
+            title = mediaMetadata.title?.toString() ?: "",
+            isPlaying = isPlaying,
+            isBuffering = playbackState == Player.STATE_BUFFERING,
+            repeatMode = repeatMode,
+            shuffleEnabled = shuffleModeEnabled,
+            positionMs = positionMs,
+            durationMs = durationMs,
+            onBack = onBack,
+            onToggleRepeat = viewModel::toggleRepeatMode,
+            onToggleShuffle = viewModel::toggleShuffleMode,
+            onOpenSpeed = { showSpeedSheet = true },
+            onOpenQueue = { showQueueSheet = true }
         )
-
-        AnimatedVisibility(
-            visible = controlsVisible,
-            enter = fadeIn(),
-            exit = fadeOut(),
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(horizontal = 16.dp)
-                // Sits just above the PlayerView time bar and bottom bar (timer /
-                // settings / fullscreen row) so it hides together with them.
-                .padding(bottom = 88.dp)
-        ) {
-            PlayerControlBar(
-                isPlaying = isPlaying,
-                repeatMode = repeatMode,
-                shuffleModeEnabled = shuffleModeEnabled,
-                onRepeatClick = { viewModel.toggleRepeatMode() },
-                onPreviousClick = { activePlayer.seekToPreviousMediaItem() },
-                onPlayPauseClick = {
-                    if (activePlayer.isPlaying) activePlayer.pause() else activePlayer.play()
-                },
-                onNextClick = { activePlayer.seekToNextMediaItem() },
-                onShuffleClick = { viewModel.toggleShuffleMode() },
-                onAnyInteraction = { playerView?.showController() }
-            )
-        }
+    } else {
+        AudioPlayerContent(
+            player = activePlayer,
+            mediaMetadata = mediaMetadata,
+            isPlaying = isPlaying,
+            repeatMode = repeatMode,
+            shuffleEnabled = shuffleModeEnabled,
+            playbackSpeed = playbackSpeed,
+            positionMs = positionMs,
+            durationMs = durationMs,
+            onBack = onBack,
+            onToggleRepeat = viewModel::toggleRepeatMode,
+            onToggleShuffle = viewModel::toggleShuffleMode,
+            onOpenSpeed = { showSpeedSheet = true },
+            onOpenQueue = { showQueueSheet = true }
+        )
     }
-}
 
-@Composable
-private fun PlayerControlBar(
-    isPlaying: Boolean,
-    repeatMode: Int,
-    shuffleModeEnabled: Boolean,
-    onRepeatClick: () -> Unit,
-    onPreviousClick: () -> Unit,
-    onPlayPauseClick: () -> Unit,
-    onNextClick: () -> Unit,
-    onShuffleClick: () -> Unit,
-    onAnyInteraction: () -> Unit
-) {
-    Surface(
-        color = Color.Black.copy(alpha = 0.55f),
-        contentColor = Color.White,
-        shape = RoundedCornerShape(36.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = {
-                onRepeatClick()
-                onAnyInteraction()
-            }) {
-                val icon = when (repeatMode) {
-                    Player.REPEAT_MODE_ONE -> Icons.Default.RepeatOne
-                    else -> Icons.Default.Repeat
-                }
-                val tint = if (repeatMode == Player.REPEAT_MODE_OFF) {
-                    LocalContentColor.current.copy(alpha = 0.38f)
-                } else {
-                    MaterialTheme.colorScheme.primary
-                }
-                Icon(icon, contentDescription = "Repeat", tint = tint)
-            }
-
-            IconButton(onClick = {
-                onPreviousClick()
-                onAnyInteraction()
-            }) {
-                Icon(
-                    Icons.Default.SkipPrevious,
-                    contentDescription = "Previous",
-                    modifier = Modifier.size(32.dp)
-                )
-            }
-
-            IconButton(
-                onClick = {
-                    onPlayPauseClick()
-                    onAnyInteraction()
-                },
-                modifier = Modifier.size(56.dp)
-            ) {
-                Icon(
-                    if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = "Play/Pause",
-                    modifier = Modifier.size(44.dp)
-                )
-            }
-
-            IconButton(onClick = {
-                onNextClick()
-                onAnyInteraction()
-            }) {
-                Icon(
-                    Icons.Default.SkipNext,
-                    contentDescription = "Next",
-                    modifier = Modifier.size(32.dp)
-                )
-            }
-
-            IconButton(onClick = {
-                onShuffleClick()
-                onAnyInteraction()
-            }) {
-                val tint = if (shuffleModeEnabled) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    LocalContentColor.current.copy(alpha = 0.38f)
-                }
-                Icon(Icons.Default.Shuffle, contentDescription = "Shuffle", tint = tint)
-            }
-        }
+    if (showQueueSheet) {
+        QueueSheet(
+            player = activePlayer,
+            currentIndex = currentIndex,
+            queueVersion = queueVersion,
+            onDismiss = { showQueueSheet = false }
+        )
     }
-}
-
-private tailrec fun Context.findActivity(): Activity? = when (this) {
-    is Activity -> this
-    is ContextWrapper -> baseContext.findActivity()
-    else -> null
+    if (showSpeedSheet) {
+        SpeedSheet(
+            currentSpeed = playbackSpeed,
+            onSelectSpeed = { speed ->
+                activePlayer.setPlaybackSpeed(speed)
+                showSpeedSheet = false
+            },
+            onDismiss = { showSpeedSheet = false }
+        )
+    }
 }

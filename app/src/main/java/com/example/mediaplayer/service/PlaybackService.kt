@@ -39,6 +39,9 @@ class PlaybackService : MediaSessionService() {
             // always jumps to the previous media item instead of restarting the
             // current one after 3 seconds of playback.
             .setMaxSeekToPreviousPositionMs(Long.MAX_VALUE)
+            // Matches the double-tap gesture in the video player UI.
+            .setSeekBackIncrementMs(10_000)
+            .setSeekForwardIncrementMs(10_000)
             .build()
         mediaSession = MediaSession.Builder(this, player)
             .setCallback(callback)
